@@ -6,7 +6,7 @@ import { connect } from 'cloudflare:sockets';
 // [Windows] Press "Win + R", input cmd and run:  Powershell -NoExit -Command "[guid]::NewGuid()"
 let userID = 'a9741601-74d0-4a6d-b469-bacfbb2f32d7';
 
-const proxyIPs = ['workers.bestip.one'];//['cdn.xn--b6gac.eu.org', 'cdn-all.xn--b6gac.eu.org', 'edgetunnel.anycast.eu.org'];
+const proxyIPs = ['proxyip.fxxk.dedyn.io'];//['cdn.xn--b6gac.eu.org', 'cdn-all.xn--b6gac.eu.org', 'edgetunnel.anycast.eu.org'];
 
 let proxyIP = proxyIPs[Math.floor(Math.random() * proxyIPs.length)];
 
@@ -796,3 +796,4 @@ function getVLESSConfig(userID, hostName) {
 const cn_hostnames = [
 'www.wto.org'
 ];
+
