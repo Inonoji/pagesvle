@@ -367,9 +367,7 @@ function processVlessHeader(vlessBuffer, userID) {
 	const uuids = userID.includes(',') ? userID.split(",") : [userID];
 	// uuid_validator(hostName, slicedBufferString);
 
-
-	// isValidUser = uuids.some(userUuid => slicedBufferString === userUuid.trim());
-	isValidUser = uuids.some(userUuid => slicedBufferString === userUuid.trim()) || uuids.length === 1 && slicedBufferString === uuids[0].trim();
+	isValidUser = uuids.some(userUuid => slicedBufferString === userUuid.trim());
 
 	console.log(`userID: ${slicedBufferString}`);
 
@@ -644,30 +642,36 @@ async function handleUDPOutBound(webSocket, vlessResponseHeader, log) {
 	// only handle dns udp for now
 	transformStream.readable.pipeTo(new WritableStream({
 		async write(chunk) {
-			const resp = await fetch(dohURL, // dns server url
-				{
-					method: 'POST',
-					headers: {
-						'content-type': 'application/dns-message',
-					},
-					body: chunk,
-				})
-			const dnsQueryResult = await resp.arrayBuffer();
-			const udpSize = dnsQueryResult.byteLength;
-			// console.log([...new Uint8Array(dnsQueryResult)].map((x) => x.toString(16)));
-			const udpSizeBuffer = new Uint8Array([(udpSize >> 8) & 0xff, udpSize & 0xff]);
-			if (webSocket.readyState === WS_READY_STATE_OPEN) {
-				log(`doh success and dns message length is ${udpSize}`);
-				if (isVlessHeaderSent) {
-					webSocket.send(await new Blob([udpSizeBuffer, dnsQueryResult]).arrayBuffer());
-				} else {
-					webSocket.send(await new Blob([vlessResponseHeader, udpSizeBuffer, dnsQueryResult]).arrayBuffer());
-					isVlessHeaderSent = true;
+			try {
+				const resp = await fetch(dohURL, // dns server url
+					{
+						method: 'POST',
+						headers: {
+							'content-type': 'application/dns-message',
+						},
+						body: chunk,
+					});
+				if (!resp.ok) {
+					throw new Error(`DNS query failed: ${resp.status} ${resp.statusText}`);
 				}
+				const dnsQueryResult = await resp.arrayBuffer();
+				const udpSize = dnsQueryResult.byteLength;
+				const udpSizeBuffer = new Uint8Array([(udpSize >> 8) & 0xff, udpSize & 0xff]);
+				if (webSocket.readyState === WS_READY_STATE_OPEN) {
+					log(`doh success and dns message length is ${udpSize}`);
+					if (isVlessHeaderSent) {
+						webSocket.send(await new Blob([udpSizeBuffer, dnsQueryResult]).arrayBuffer());
+					} else {
+						webSocket.send(await new Blob([vlessResponseHeader, udpSizeBuffer, dnsQueryResult]).arrayBuffer());
+						isVlessHeaderSent = true;
+					}
+				}
+			} catch (error) {
+				log('DNS query error: ' + error.message);
 			}
 		}
 	})).catch((error) => {
-		log('dns udp has error' + error)
+		log('dns udp has error: ' + error.message);
 	});
 
 	const writer = transformStream.writable.getWriter();
@@ -681,6 +685,27 @@ async function handleUDPOutBound(webSocket, vlessResponseHeader, log) {
 			writer.write(chunk);
 		}
 	};
+}
+
+/**
+ * Creates VLESS subscription configuration
+ * @param {string} userID - single or comma separated userIDs
+ * @param {string | null} hostName
+ * @returns {string}
+ */
+function createVLESSSub(userID, hostName) {
+    const configs = [];
+    const uuids = userID.includes(',') ? userID.split(',') : [userID];
+    
+    uuids.forEach(uuid => {
+        // WS配置（无TLS）
+        configs.push(`vless://${uuid}@${hostName}:80?encryption=none&security=none&type=ws&host=${hostName}&path=%2F%3Fed%3D2048#${hostName}-WS`);
+        
+        // WS配置（有TLS）
+        configs.push(`vless://${uuid}@${hostName}:443?encryption=none&security=tls&type=ws&host=${hostName}&sni=${hostName}&fp=random&path=%2F%3Fed%3D2048#${hostName}-WS-TLS`);
+    });
+    
+    return configs.join('\n');
 }
 
 /**
